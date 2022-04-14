@@ -34,7 +34,7 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckForNull;
 
 /**
- * A rate limiter. Conceptually, a rate limiter distributes permits at a configurable rate. Each
+ * A rate limiter. Conceptually（概念上）, a rate limiter distributes permits at a configurable rate. Each
  * {@link #acquire()} blocks if necessary until a permit is available, and then takes it. Once
  * acquired, permits need not be released.
  *
