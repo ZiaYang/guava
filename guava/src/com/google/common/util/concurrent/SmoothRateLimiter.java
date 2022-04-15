@@ -309,21 +309,33 @@ abstract class SmoothRateLimiter extends RateLimiter {
     }
   }
 
-  /** The currently stored permits. */
+  /**
+   * The currently stored permits.
+   * 当前存储的许可证
+   * */
   double storedPermits;
 
-  /** The maximum number of stored permits. */
+  /**
+   * The maximum number of stored permits.
+   * 最大可存储的许可证数量
+   * */
   double maxPermits;
 
   /**
-   * The interval between two unit requests, at our stable rate. E.g., a stable rate of 5 permits
+   *
+   * The interval（间隔） between two unit requests, at our stable rate. E.g., a stable rate of 5 permits
    * per second has a stable interval of 200ms.
+   * 两个请求单位之间的间隔时间，在我们的稳定的速率下。
+   * 例如，稳定速率是5个/s，稳定的间隔是200ms（1000/5)
+   *
    */
   double stableIntervalMicros;
 
   /**
    * The time when the next request (no matter its size) will be granted. After granting a request,
    * this is pushed further in the future. Large requests push this further than small requests.
+   * 下一个请求被批准的时间（无论其大小）。 在批准一个请求后，该字段会被往前推进。
+   * 大请求会比小请求推进得更远。
    */
   private long nextFreeTicketMicros = 0L; // could be either in the past or future
 
@@ -353,15 +365,20 @@ abstract class SmoothRateLimiter extends RateLimiter {
 
   @Override
   final long reserveEarliestAvailable(int requiredPermits, long nowMicros) {
+    //更新许可证最新数量
     resync(nowMicros);
     long returnValue = nextFreeTicketMicros;
+    //这意味着请求的许可证数量大于已存储的许可证数量，可以先扣减掉
     double storedPermitsToSpend = min(requiredPermits, this.storedPermits);
+    //请求的许可证数量 扣减 已有的许可证数量 = 需要等待的许可证数量，由此可以计算出，需要等待的时间
     double freshPermits = requiredPermits - storedPermitsToSpend;
     long waitMicros =
         storedPermitsToWaitTime(this.storedPermits, storedPermitsToSpend)
             + (long) (freshPermits * stableIntervalMicros);
 
+    //更新下一个可用门票时间
     this.nextFreeTicketMicros = LongMath.saturatedAdd(nextFreeTicketMicros, waitMicros);
+    //并从现有的存库中，直接先扣减掉能够扣减的库存许可证数量。 但并不会导致库存为负数。
     this.storedPermits -= storedPermitsToSpend;
     return returnValue;
   }
@@ -377,12 +394,16 @@ abstract class SmoothRateLimiter extends RateLimiter {
 
   /**
    * Returns the number of microseconds during cool down that we have to wait to get a new permit.
+   * 返回冷却期间我们必须等待获得新许可的微秒数
    */
   abstract double coolDownIntervalMicros();
 
-  /** Updates {@code storedPermits} and {@code nextFreeTicketMicros} based on the current time. */
+  /**
+   * Updates {@code storedPermits} and {@code nextFreeTicketMicros} based on the current time.
+   * 基于当前的时间 更新 存储的许可证数量，下一个可用门票时间
+   * */
   void resync(long nowMicros) {
-    // if nextFreeTicket is in the past, resync to now
+    // if nextFreeTicket is in the past, resync to now 如果下一个可用门票时间属于过去，则同步到现在。
     if (nowMicros > nextFreeTicketMicros) {
       double newPermits = (nowMicros - nextFreeTicketMicros) / coolDownIntervalMicros();
       storedPermits = min(maxPermits, storedPermits + newPermits);

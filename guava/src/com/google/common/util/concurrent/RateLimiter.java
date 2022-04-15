@@ -34,7 +34,7 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckForNull;
 
 /**
- * A rate limiter. Conceptually（概念上）, a rate limiter distributes permits at a configurable rate. Each
+ * A rate limiter. Conceptually（概念上）, a rate limiter distributes（分发） permits at a configurable rate. Each
  * {@link #acquire()} blocks if necessary until a permit is available, and then takes it. Once
  * acquired, permits need not be released.
  *
@@ -293,14 +293,19 @@ public abstract class RateLimiter {
   /**
    * Acquires the given number of permits from this {@code RateLimiter}, blocking until the request
    * can be granted. Tells the amount of time slept, if any.
+   * 从限流器获取给定数量的许可，阻塞直到请求拿到相关许可为止。 并返回请求被阻塞了多久时间。
    *
    * @param permits the number of permits to acquire
-   * @return time spent sleeping to enforce rate, in seconds; 0.0 if not rate-limited
+   * @return time spent sleeping to enforce rate, in seconds; 0.0 if not rate-limited。返回强制限流被阻塞的时间，返回0.0标识无限流。
    * @throws IllegalArgumentException if the requested number of permits is negative or zero
    * @since 16.0 (present in 13.0 with {@code void} return type})
+   *
+   * 注意这里并非是线程同步的，这里可能有多个线程并发。请求在sleep相应的时间后，可默认直接拿到了许可证。不必再次检查是否有足够许可。。
+   * 这样就比较简单，而且高效，没有大量的锁逻辑。
    */
   @CanIgnoreReturnValue
   public double acquire(int permits) {
+    //预订相应许可证数量，并得知需要等待的时间，然后sleep进行等待。
     long microsToWait = reserve(permits);
     stopwatch.sleepMicrosUninterruptibly(microsToWait);
     return 1.0 * microsToWait / SECONDS.toMicros(1L);
@@ -309,11 +314,13 @@ public abstract class RateLimiter {
   /**
    * Reserves the given number of permits from this {@code RateLimiter} for future use, returning
    * the number of microseconds until the reservation can be consumed.
+   * 储备给定数量的许可证以备未来使用，返回直到预订的许可证可被消耗时需要等待的时间
    *
    * @return time in microseconds to wait until the resource can be acquired, never negative
    */
   final long reserve(int permits) {
     checkPermits(permits);
+    //线程同步
     synchronized (mutex()) {
       return reserveAndGetWaitLength(permits, stopwatch.readMicros());
     }
@@ -428,11 +435,16 @@ public abstract class RateLimiter {
 
   /**
    * Reserves next ticket and returns the wait time that the caller must wait for.
+   * 预订下一个ticket，并且返回调用者必须等待的时间
    *
-   * @return the required wait time, never negative
+   * 上层使用了同步原语，因此该方法无需考虑线程安全问题。
+   *
+   * @return the required wait time, never negative 需要等待的时间，不会为负数
    */
   final long reserveAndGetWaitLength(int permits, long nowMicros) {
+    //返回限流器可用时间戳
     long momentAvailable = reserveEarliestAvailable(permits, nowMicros);
+    //限流器可用时间 - 当前时间，等于当前请求需要等待的时间
     return max(momentAvailable - nowMicros, 0);
   }
 
@@ -447,6 +459,7 @@ public abstract class RateLimiter {
   /**
    * Reserves the requested number of permits and returns the time that those permits can be used
    * (with one caveat).
+   * 预订请求数量的许可证，并且返回这些许可证可被使用的时间
    *
    * @return the time that the permits may be used, or, if the permits may be used immediately, an
    *     arbitrary past or present time

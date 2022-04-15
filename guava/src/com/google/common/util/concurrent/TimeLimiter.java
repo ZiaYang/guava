@@ -28,7 +28,7 @@ import java.util.concurrent.TimeoutException;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
- * Imposes a time limit on method calls.
+ * Imposes（强加） a time limit on method calls.
  *
  * @author Kevin Bourrillion
  * @author Jens Nyman
